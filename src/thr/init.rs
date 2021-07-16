@@ -1,7 +1,8 @@
 #![cfg_attr(feature = "std", allow(dead_code, unreachable_code))]
 
-use crate::{map::reg::scb, reg::prelude::*};
 use drone_core::token::Token;
+
+use crate::{map::reg::scb, reg::prelude::*};
 
 /// Threads initialization token.
 ///
@@ -161,21 +162,13 @@ mod mpu {
         mpu_ctrl.reset();
         #[cfg(not(feature = "std"))]
         unsafe {
-            asm!(
+            core::arch::asm!(
                 "ldmia r0!, {{r2, r3, r4, r5, r8, r9, r10, r11}}",
                 "stmia r1,  {{r2, r3, r4, r5, r8, r9, r10, r11}}",
                 "ldmia r0!, {{r2, r3, r4, r5, r8, r9, r10, r11}}",
                 "stmia r1,  {{r2, r3, r4, r5, r8, r9, r10, r11}}",
                 inout("r0") MPU_RESET_TABLE.as_ptr() => _,
                 in("r1") mpu::Rbar::<Srt>::ADDRESS,
-                out("r2") _,
-                out("r3") _,
-                out("r4") _,
-                out("r5") _,
-                out("r8") _,
-                out("r9") _,
-                out("r10") _,
-                out("r11") _,
                 options(preserves_flags),
             );
         }

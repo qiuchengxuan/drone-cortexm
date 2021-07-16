@@ -35,7 +35,7 @@ maintenance = { status = "actively-developed" }
 
 [features]
 default = []
-std = ["drone-core/std", "futures/std"]
+std = ["futures/std"]
 bit-band = []
 floating-point-unit = []
 memory-protection-unit = []

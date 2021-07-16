@@ -115,7 +115,6 @@ pub use self::{
 pub use drone_cortexm_macros::thr_nvic as nvic;
 
 use crate::sv::Supervisor;
-use drone_core::thr::ThrToken;
 
 /// A trait to assign a supervisor to threads.
 pub trait ThrSv: ThrToken {

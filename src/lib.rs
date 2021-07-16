@@ -44,16 +44,13 @@
 //! std = ["drone-cortexm/std"]
 //! ```
 
-#![feature(asm)]
-#![feature(const_fn)]
+#![feature(asm_const)]
 #![feature(exhaustive_patterns)]
 #![feature(marker_trait_attr)]
 #![feature(naked_functions)]
 #![feature(never_type)]
 #![feature(never_type_fallback)]
-#![feature(prelude_import)]
 #![feature(proc_macro_hygiene)]
-#![feature(untagged_unions)]
 #![warn(missing_docs, unsafe_op_in_unsafe_fn)]
 #![warn(clippy::pedantic)]
 #![allow(
@@ -88,7 +85,3 @@ mod drone_core_macro_reexport {
 }
 
 pub use drone_core_macro_reexport::*;
-
-#[prelude_import]
-#[allow(unused_imports)]
-use drone_core::prelude::*;

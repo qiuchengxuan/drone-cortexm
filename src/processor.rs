@@ -2,6 +2,8 @@
 
 #![cfg_attr(feature = "std", allow(unused_variables, unreachable_code))]
 
+use core::arch::asm;
+
 /// Waits for interrupt.
 ///
 /// It is a hint instruction. It suspends execution, in the lowest power state

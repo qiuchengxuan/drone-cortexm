@@ -1,8 +1,10 @@
-use super::PORTS_COUNT;
 use core::{
+    arch::asm,
     fmt::{self, Write},
     slice,
 };
+
+use super::PORTS_COUNT;
 
 const ADDRESS_BASE: usize = 0xE000_0000;
 

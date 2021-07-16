@@ -1,5 +1,6 @@
-use crate::thr::{prelude::*, wake::WakeInt, NvicBlock};
 use core::task::Waker;
+
+use crate::thr::{prelude::*, wake::WakeInt, NvicBlock};
 
 /// An interrupt token.
 pub trait IntToken: ThrToken {

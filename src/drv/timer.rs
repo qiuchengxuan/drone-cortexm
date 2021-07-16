@@ -1,5 +1,6 @@
 //! Generic timer.
 
+use alloc::boxed::Box;
 use core::{
     fmt,
     future::Future,
