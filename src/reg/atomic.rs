@@ -1,11 +1,12 @@
 #![cfg_attr(feature = "std", allow(unreachable_code, unused_variables))]
 
+use drone_core::bitfield::Bitfield;
+
 use crate::reg::{
     field::{RegFieldBit, RegFieldBits, WWRegField, WWRegFieldBit, WWRegFieldBits},
     tag::RegAtomic,
     RReg, Reg, RegHold, RegRef, WReg, WRegAtomic,
 };
-use drone_core::bitfield::Bitfield;
 
 /// Atomic operations for read-write register.
 // FIXME https://github.com/rust-lang/rust/issues/46397
@@ -45,9 +46,7 @@ where
     ///
     /// This operation is atomic, it repeats itself in case it was interrupted
     /// in the middle. Thus the closure `f` may be called multiple times.
-    fn modify<F>(&self, f: F)
-    where
-        F: Fn(&mut <Self::Reg as Reg<T>>::Val);
+    fn modify(&self, f: impl Fn(&mut <Self::Reg as Reg<T>>::Val));
 }
 
 /// Atomic operations for writable single-bit field of read-write register.
@@ -81,17 +80,10 @@ where
     fn write_bits(&self, bits: <<Self::Reg as Reg<T>>::Val as Bitfield>::Bits);
 }
 
-pub trait AtomicBits: Sized {
-    unsafe fn load_excl(address: usize) -> Self;
-
-    unsafe fn store_excl(self, address: usize) -> bool;
-}
-
 impl<'a, T, R> RwRegAtomic<'a, T> for R
 where
     T: RegAtomic,
     R: RReg<T> + WRegAtomic<'a, T> + RegRef<'a, T>,
-    <R::Val as Bitfield>::Bits: AtomicBits,
 {
     #[inline]
     fn modify<F>(&'a self, f: F)
@@ -100,13 +92,10 @@ where
             &'b mut <Self as RegRef<'a, T>>::Hold,
         ) -> &'b mut <Self as RegRef<'a, T>>::Hold,
     {
-        loop {
-            let mut val = unsafe { self.hold(load_excl::<T, Self>()) };
-            f(&mut val);
-            if unsafe { store_excl::<T, Self>(val.val()) } {
-                break;
-            }
-        }
+        let ptr = Self::ADDRESS as *mut Self::Val;
+        let mut val = unsafe { self.hold(core::ptr::read_volatile(ptr)) };
+        f(&mut val);
+        unsafe { core::ptr::write_volatile(ptr, val.val()) }
     }
 
     #[inline]
@@ -114,13 +103,10 @@ where
     where
         F: for<'b> Fn(&'b Self, &'b mut Self::Val),
     {
-        loop {
-            let mut val = unsafe { load_excl::<T, Self>() };
-            f(self, &mut val);
-            if unsafe { store_excl::<T, Self>(val) } {
-                break;
-            }
-        }
+        let ptr = Self::ADDRESS as *mut Self::Val;
+        let mut val = unsafe { core::ptr::read_volatile(ptr) };
+        f(self, &mut val);
+        unsafe { core::ptr::write_volatile(ptr, val) }
     }
 }
 
@@ -129,20 +115,13 @@ where
     T: RegAtomic,
     R: WWRegField<T>,
     R::Reg: RReg<T> + WReg<T>,
-    <<R::Reg as Reg<T>>::Val as Bitfield>::Bits: AtomicBits,
 {
     #[inline]
-    fn modify<F>(&self, f: F)
-    where
-        F: Fn(&mut <Self::Reg as Reg<T>>::Val),
-    {
-        loop {
-            let mut val = unsafe { load_excl::<T, Self::Reg>() };
-            f(&mut val);
-            if unsafe { store_excl::<T, Self::Reg>(val) } {
-                break;
-            }
-        }
+    fn modify(&self, f: impl Fn(&mut <Self::Reg as Reg<T>>::Val)) {
+        let ptr = Self::Reg::ADDRESS as *mut <Self::Reg as Reg<T>>::Val;
+        let mut val = unsafe { core::ptr::read_volatile(ptr) };
+        f(&mut val);
+        unsafe { core::ptr::write_volatile(ptr, val) };
     }
 }
 
@@ -154,23 +133,17 @@ where
 {
     #[inline]
     fn set_bit(&self) {
-        self.modify(|val| {
-            self.set(val);
-        });
+        self.modify(|val| self.set(val))
     }
 
     #[inline]
     fn clear_bit(&self) {
-        self.modify(|val| {
-            self.clear(val);
-        });
+        self.modify(|val| self.clear(val))
     }
 
     #[inline]
     fn toggle_bit(&self) {
-        self.modify(|val| {
-            self.toggle(val);
-        });
+        self.modify(|val| self.toggle(val))
     }
 }
 
@@ -182,69 +155,6 @@ where
 {
     #[inline]
     fn write_bits(&self, bits: <<Self::Reg as Reg<T>>::Val as Bitfield>::Bits) {
-        self.modify(|val| {
-            self.write(val, bits);
-        });
+        self.modify(|val| self.write(val, bits))
     }
 }
-
-unsafe fn load_excl<T, R>() -> R::Val
-where
-    T: RegAtomic,
-    R: Reg<T>,
-    <R::Val as Bitfield>::Bits: AtomicBits,
-{
-    unsafe { R::val_from(<R::Val as Bitfield>::Bits::load_excl(R::ADDRESS)) }
-}
-
-unsafe fn store_excl<T, R>(val: R::Val) -> bool
-where
-    T: RegAtomic,
-    R: Reg<T>,
-    <R::Val as Bitfield>::Bits: AtomicBits,
-{
-    unsafe { val.bits().store_excl(R::ADDRESS) }
-}
-
-macro_rules! atomic_bits {
-    ($type:ty, $ldrex:expr, $strex:expr) => {
-        impl AtomicBits for $type {
-            unsafe fn load_excl(address: usize) -> Self {
-                #[cfg(feature = "std")]
-                return unimplemented!();
-                let output: Self;
-                #[cfg(not(feature = "std"))]
-                unsafe {
-                    asm!(
-                        $ldrex,
-                        address = in(reg) address,
-                        output = lateout(reg) output,
-                        options(readonly, nostack, preserves_flags),
-                    );
-                }
-                output
-            }
-
-            unsafe fn store_excl(self, address: usize) -> bool {
-                #[cfg(feature = "std")]
-                return unimplemented!();
-                let status: Self;
-                #[cfg(not(feature = "std"))]
-                unsafe {
-                    asm!(
-                        $strex,
-                        input = in(reg) self,
-                        address = in(reg) address,
-                        status = lateout(reg) status,
-                        options(nostack, preserves_flags),
-                    );
-                }
-                status == 0
-            }
-        }
-    };
-}
-
-atomic_bits!(u32, "ldrex {output}, [{address}]", "strex {status}, {input}, [{address}]");
-atomic_bits!(u16, "ldrexh {output}, [{address}]", "strexh {status}, {input}, [{address}]");
-atomic_bits!(u8, "ldrexb {output}, [{address}]", "strexb {status}, {input}, [{address}]");
